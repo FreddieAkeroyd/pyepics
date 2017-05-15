@@ -124,7 +124,7 @@ def find_libca():
 
     # Test 2: look in installed python location for dll
     lname = 'libca.so'
-    if os.uname == 'nt':
+    if os.name == 'nt':
         lname = 'ca.dll'
     elif sys.platform == 'darwin':
         lname = 'libca.dylib'
@@ -247,14 +247,28 @@ def initialize_libca():
     libca.ca_version.restype   = ctypes.c_char_p
     libca.ca_host_name.restype = ctypes.c_char_p
     libca.ca_name.restype      = ctypes.c_char_p
-    # libca.ca_name.argstypes    = [dbr.chid_t]
-    # libca.ca_state.argstypes   = [dbr.chid_t]
+    libca.ca_name.argstypes    = [dbr.chid_t]
+    libca.ca_state.argstypes   = [dbr.chid_t]
+    libca.ca_create_channel.argtypes = [ ctypes.c_char_p, ctypes.CFUNCTYPE(None, ctypes.POINTER(dbr.connection_args)), ctypes.c_void_p, ctypes.c_uint, ctypes.POINTER(dbr.chid_t) ]
+
     libca.ca_message.restype   = ctypes.c_char_p
     libca.ca_attach_context.argtypes = [ctypes.c_void_p]
+    libca.ca_array_put.argtypes = [ctypes.c_long, ctypes.c_ulong, dbr.chid_t, ctypes.c_void_p]
+    libca.ca_array_put_callback.argtypes = [ctypes.c_long, ctypes.c_ulong, dbr.chid_t, ctypes.c_void_p, 
+                                          ctypes.CFUNCTYPE(None, ctypes.POINTER(dbr.event_handler_args)), ctypes.c_void_p]
+    libca.ca_array_get_callback.argtypes = [ctypes.c_long, ctypes.c_ulong, dbr.chid_t, ctypes.CFUNCTYPE(None, ctypes.POINTER(dbr.event_handler_args)), 
+                                          ctypes.py_object]
 
+    libca.ca_create_subscription.argtypes = [ctypes.c_long, ctypes.c_ulong, dbr.chid_t, ctypes.c_ulong, 
+                                          ctypes.CFUNCTYPE(None, ctypes.POINTER(dbr.event_handler_args)), ctypes.py_object, ctypes.POINTER(ctypes.c_void_p)]
+    libca.ca_clear_subscription.argtypes = [ctypes.c_void_p]
     # save value offests used for unpacking
     # TIME and CTRL data as an array in dbr module
-    dbr.value_offset = (39*ctypes.c_short).in_dll(libca,'dbr_value_offset')
+    
+    # in_dll is not available for arrays in IronPython, so use a reference to the first element
+    value_offset0 = ctypes.c_short.in_dll(libca,'dbr_value_offset')
+    dbr.value_offset = ctypes.cast(ctypes.addressof(value_offset0), (39*ctypes.c_short))
+
     initial_context = current_context()
     if AUTO_CLEANUP:
         atexit.register(finalize_libca)
@@ -603,7 +617,7 @@ def _onGetEvent(args, **kws):
     if args.status != dbr.ECA_NORMAL:
         return
 
-    get_cache(name(args.chid))[args.usr] = memcopy(dbr.cast_args(args))
+    get_cache(name(args.chid))[args.usr.value] = (dbr.cast_args(args))
 
 
 ## put event handler:
@@ -1099,7 +1113,7 @@ def _unpack(chid, data, count=None, ftype=None, as_numpy=True):
         """ Scan a string, or an array of strings as a list, depending on content """
         out = []
         for elem in range(min(count, len(data))):
-            this = strjoin('', BYTES2STR(data[elem].value)).rstrip()
+            this = strjoin('', BYTES2STR(data[elem])).rstrip()
             if NULLCHAR_2 in this:
                 this = this[:this.index(NULLCHAR_2)]
             out.append(this)
